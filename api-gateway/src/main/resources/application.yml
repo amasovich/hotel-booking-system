@@ -22,6 +22,19 @@ spring:
           filters:
             - RewritePath=/hotel/(?<segment>.*), /${segment}
 
+        - id: booking-service-api-route
+          uri: lb://booking-service
+          predicates:
+            - Path=/api/booking/**
+          filters:
+            - RewritePath=/api/booking/(?<segment>.*), /${segment}
+
+        - id: hotel-service-api-route
+          uri: lb://hotel-service
+          predicates:
+            - Path=/api/hotel/**
+          filters:
+            - RewritePath=/api/hotel/(?<segment>.*), /${segment}
 eureka:
   client:
     service-url:
