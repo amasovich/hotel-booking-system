@@ -8,6 +8,7 @@ spring:
   cloud:
     gateway:
       routes:
+        # ТЕХНИЧЕСКИЕ: /booking/** и /hotel/**
         - id: booking-service-route
           uri: lb://booking-service
           predicates:
@@ -22,6 +23,8 @@ spring:
           filters:
             - RewritePath=/hotel/(?<segment>.*), /${segment}
 
+        # ПУБЛИЧНЫЕ API
+        # Booking API: /api/booking/**
         - id: booking-service-api-route
           uri: lb://booking-service
           predicates:
@@ -29,12 +32,17 @@ spring:
           filters:
             - RewritePath=/api/booking/(?<segment>.*), /${segment}
 
-        - id: hotel-service-api-route
+        # Hotel API: /api/hotels/**
+        - id: hotel-service-hotels-api-route
           uri: lb://hotel-service
           predicates:
-            - Path=/api/hotel/**
-          filters:
-            - RewritePath=/api/hotel/(?<segment>.*), /${segment}
+            - Path=/api/hotels/**
+
+        # Hotel API: /api/rooms/**
+        - id: hotel-service-rooms-api-route
+          uri: lb://hotel-service
+          predicates:
+            - Path=/api/rooms/**
 eureka:
   client:
     service-url:
