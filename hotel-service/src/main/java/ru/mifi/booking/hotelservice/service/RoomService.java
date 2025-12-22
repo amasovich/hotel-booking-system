@@ -1,5 +1,9 @@
 package ru.mifi.booking.hotelservice.service;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import ru.mifi.booking.common.exception.ConflictException;
+import ru.mifi.booking.common.exception.NotFoundException;
 import ru.mifi.booking.hotelservice.dto.ConfirmAvailabilityRequest;
 import ru.mifi.booking.hotelservice.dto.RoomDto;
 import ru.mifi.booking.hotelservice.entity.Hotel;
@@ -7,8 +11,6 @@ import ru.mifi.booking.hotelservice.entity.Room;
 import ru.mifi.booking.hotelservice.entity.RoomLock;
 import ru.mifi.booking.hotelservice.repository.RoomLockRepository;
 import ru.mifi.booking.hotelservice.repository.RoomRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -63,21 +65,23 @@ public class RoomService {
             return; // повторный вызов с тем же requestId
         }
 
-        Room room = roomRepository.findById(roomId).orElseThrow();
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("Room " + roomId + " not found"));
 
         if (!room.isAvailable()) {
-            throw new IllegalStateException("Room is not operational");
+            throw new ConflictException("Room is not operational");
         }
 
         if (!roomLockRepository.findOverlaps(room, req.startDate(), req.endDate()).isEmpty()) {
-            throw new IllegalStateException("Room is not available for this period");
+            throw new ConflictException("Room is not available for this period");
         }
 
         RoomLock lock = new RoomLock(null, room, req.startDate(), req.endDate(), req.bookingId(), req.requestId());
         roomLockRepository.save(lock);
 
-        // метрика справедливости (как в сильных решениях коллег)
+        // метрика справедливости
         room.setTimesBooked(room.getTimesBooked() + 1);
+        // save не обязателен, если Room является managed-entity в текущей транзакции.
     }
 
     /**
@@ -85,12 +89,20 @@ public class RoomService {
      */
     @Transactional
     public void release(Long roomId, String bookingId) {
-        roomRepository.findById(roomId).orElseThrow();
-        roomLockRepository.findByBookingId(bookingId).ifPresent(roomLockRepository::delete);
+        roomRepository.findById(roomId)
+                .orElseThrow(() -> new NotFoundException("Room " + roomId + " not found"));
+
+        roomLockRepository.findByBookingId(bookingId)
+                .ifPresent(roomLockRepository::delete);
     }
 
     private RoomDto toDto(Room room) {
-        return new RoomDto(room.getId(), room.getHotel().getId(), room.getNumber(), room.isAvailable(), room.getTimesBooked());
+        return new RoomDto(
+                room.getId(),
+                room.getHotel().getId(),
+                room.getNumber(),
+                room.isAvailable(),
+                room.getTimesBooked()
+        );
     }
 }
-

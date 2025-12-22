@@ -1,9 +1,10 @@
 package ru.mifi.booking.hotelservice.service;
 
+import org.springframework.stereotype.Service;
+import ru.mifi.booking.common.exception.NotFoundException;
 import ru.mifi.booking.hotelservice.dto.HotelDto;
 import ru.mifi.booking.hotelservice.entity.Hotel;
 import ru.mifi.booking.hotelservice.repository.HotelRepository;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 
@@ -34,10 +35,13 @@ public class HotelService {
     }
 
     /**
-     * Получить отель или выбросить исключение (позже подключим красивый handler ошибок).
+     * Получить отель или выбросить 404 Not Found.
+     *
+     * @param id идентификатор отеля
+     * @return сущность Hotel
      */
     public Hotel getOrThrow(Long id) {
-        return hotelRepository.findById(id).orElseThrow();
+        return hotelRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Hotel " + id + " not found"));
     }
 }
-

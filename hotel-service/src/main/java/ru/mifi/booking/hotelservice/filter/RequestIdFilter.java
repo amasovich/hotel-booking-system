@@ -40,6 +40,7 @@ public class RequestIdFilter extends OncePerRequestFilter {
             requestId = UUID.randomUUID().toString();
         }
 
+        request.setAttribute(RequestHeaders.X_REQUEST_ID, requestId); // <-- важная строка
         response.setHeader(RequestHeaders.X_REQUEST_ID, requestId);
 
         MDC.put(MDC_KEY, requestId);
