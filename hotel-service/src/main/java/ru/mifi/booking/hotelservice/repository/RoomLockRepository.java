@@ -29,6 +29,21 @@ public interface RoomLockRepository extends JpaRepository<RoomLock, Long> {
     );
 
     /**
+     * Все блокировки по отелю в заданном периоде (для статистики).
+     *
+     * @param hotelId идентификатор отеля
+     * @param start   начало периода
+     * @param end     конец периода
+     * @return список блокировок, которые пересекаются с периодом
+     */
+    @Query("select rl from RoomLock rl where rl.room.hotel.id = :hotelId and not (rl.endDate <= :start or rl.startDate >= :end)")
+    List<RoomLock> findOverlapsInHotel(
+            @Param("hotelId") Long hotelId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
+
+    /**
      * Поиск блокировки по bookingId.
      *
      * @param bookingId идентификатор бронирования
@@ -43,4 +58,11 @@ public interface RoomLockRepository extends JpaRepository<RoomLock, Long> {
      * @return блокировка, если найдена
      */
     Optional<RoomLock> findByRequestId(String requestId);
+
+    /**
+     * Удалить все блокировки конкретного номера.
+     *
+     * @param roomId id номера
+     */
+    void deleteAllByRoom_Id(Long roomId);
 }

@@ -2,10 +2,13 @@ package ru.mifi.booking.hotelservice.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.mifi.booking.common.exception.BadRequestException;
 import ru.mifi.booking.common.exception.ConflictException;
 import ru.mifi.booking.common.exception.NotFoundException;
 import ru.mifi.booking.hotelservice.dto.ConfirmAvailabilityRequest;
 import ru.mifi.booking.hotelservice.dto.RoomDto;
+import ru.mifi.booking.hotelservice.dto.RoomStatsDto;
+import ru.mifi.booking.hotelservice.dto.UpdateRoomRequest;
 import ru.mifi.booking.hotelservice.entity.Hotel;
 import ru.mifi.booking.hotelservice.entity.Room;
 import ru.mifi.booking.hotelservice.entity.RoomLock;
@@ -13,8 +16,11 @@ import ru.mifi.booking.hotelservice.repository.RoomLockRepository;
 import ru.mifi.booking.hotelservice.repository.RoomRepository;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class RoomService {
@@ -37,9 +43,23 @@ public class RoomService {
     }
 
     /**
-     * Список доступных номеров на период.
+     * USER: получить номер по id.
+     *
+     * @param id идентификатор номера
+     * @return номер
+     */
+    public RoomDto get(Long id) {
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Room " + id + " not found"));
+        return toDto(room);
+    }
+
+    /**
+     * USER: список доступных номеров на период.
      */
     public List<RoomDto> listAvailable(LocalDate start, LocalDate end) {
+        validateRange(start, end);
+
         return roomRepository.findAllAvailable().stream()
                 .filter(r -> roomLockRepository.findOverlaps(r, start, end).isEmpty())
                 .map(this::toDto)
@@ -47,11 +67,99 @@ public class RoomService {
     }
 
     /**
-     * Рекомендованные номера: те же доступные, но отсортированы по timesBooked (по возрастанию).
+     * USER: рекомендованные номера: те же доступные, но отсортированы по timesBooked (по возрастанию), затем по id.
      */
     public List<RoomDto> recommend(LocalDate start, LocalDate end) {
         return listAvailable(start, end).stream()
                 .sorted(Comparator.comparingLong(RoomDto::timesBooked).thenComparing(RoomDto::id))
+                .toList();
+    }
+
+    /**
+     * ADMIN: частично обновить номер (PATCH).
+     *
+     * @param id  идентификатор номера
+     * @param req запрос обновления
+     * @return обновлённый номер
+     */
+    @Transactional
+    public RoomDto update(Long id, UpdateRoomRequest req) {
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Room " + id + " not found"));
+
+        boolean changed = false;
+
+        if (req != null && req.number() != null) {
+            String number = req.number();
+            if (number.isBlank()) {
+                throw new BadRequestException("number must not be blank");
+            }
+            room.setNumber(number);
+            changed = true;
+        }
+
+        if (req != null && req.available() != null) {
+            room.setAvailable(req.available());
+            changed = true;
+        }
+
+        if (!changed) {
+            throw new BadRequestException("At least one field must be provided for PATCH");
+        }
+
+        return toDto(room);
+    }
+
+    /**
+     * ADMIN: удалить номер вместе с блокировками.
+     *
+     * @param id идентификатор номера
+     */
+    @Transactional
+    public void delete(Long id) {
+        Room room = roomRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Room " + id + " not found"));
+
+        roomLockRepository.deleteAllByRoom_Id(room.getId());
+        roomRepository.delete(room);
+    }
+
+    /**
+     * ADMIN: статистика загруженности номеров по отелю за период.
+     *
+     * @param hotelId идентификатор отеля
+     * @param start   начало периода
+     * @param end     конец периода
+     * @return статистика по каждому номеру отеля
+     */
+    public List<RoomStatsDto> stats(Long hotelId, LocalDate start, LocalDate end) {
+        validateRange(start, end);
+
+        List<Room> rooms = roomRepository.findAllByHotelId(hotelId);
+        List<RoomLock> locks = roomLockRepository.findOverlapsInHotel(hotelId, start, end);
+
+        Map<Long, List<RoomLock>> locksByRoomId = locks.stream()
+                .collect(Collectors.groupingBy(l -> l.getRoom().getId()));
+
+        return rooms.stream()
+                .sorted(Comparator.comparingLong(Room::getId))
+                .map(room -> {
+                    List<RoomLock> roomLocks = locksByRoomId.getOrDefault(room.getId(), List.of());
+
+                    long locksCount = roomLocks.size();
+                    long bookedDays = roomLocks.stream()
+                            .mapToLong(l -> overlapDays(l.getStartDate(), l.getEndDate(), start, end))
+                            .sum();
+
+                    return new RoomStatsDto(
+                            room.getId(),
+                            room.getHotel().getId(),
+                            room.getNumber(),
+                            room.getTimesBooked(),
+                            locksCount,
+                            bookedDays
+                    );
+                })
                 .toList();
     }
 
@@ -64,6 +172,8 @@ public class RoomService {
         if (roomLockRepository.findByRequestId(req.requestId()).isPresent()) {
             return; // повторный вызов с тем же requestId
         }
+
+        validateRange(req.startDate(), req.endDate());
 
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new NotFoundException("Room " + roomId + " not found"));
@@ -79,21 +189,51 @@ public class RoomService {
         RoomLock lock = new RoomLock(null, room, req.startDate(), req.endDate(), req.bookingId(), req.requestId());
         roomLockRepository.save(lock);
 
-        // метрика справедливости
+        // метрика справедливости: увеличиваем при подтверждении доступности
         room.setTimesBooked(room.getTimesBooked() + 1);
         // save не обязателен, если Room является managed-entity в текущей транзакции.
     }
 
     /**
      * INTERNAL: компенсирующее действие — снять блокировку.
+     *
+     * <p>
+     * Важный момент fairness-метрики:
+     * если блокировку реально нашли и удалили, то уменьшаем timesBooked на 1 (не ниже 0),
+     * чтобы отменённые брони не "забивали" статистику рекомендаций.
+     * </p>
      */
     @Transactional
     public void release(Long roomId, String bookingId) {
-        roomRepository.findById(roomId)
+        Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new NotFoundException("Room " + roomId + " not found"));
 
         roomLockRepository.findByBookingId(bookingId)
-                .ifPresent(roomLockRepository::delete);
+                .ifPresent(lock -> {
+                    // Доп.страховка: bookingId уникален, но проверю, что lock относится к нашему roomId.
+                    if (lock.getRoom() != null && roomId.equals(lock.getRoom().getId())) {
+                        roomLockRepository.delete(lock);
+
+                        long current = room.getTimesBooked();
+                        room.setTimesBooked(Math.max(0, current - 1));
+                    }
+                });
+    }
+
+    private void validateRange(LocalDate start, LocalDate end) {
+        if (start == null || end == null) {
+            throw new BadRequestException("start and end must be provided");
+        }
+        if (!start.isBefore(end)) {
+            throw new BadRequestException("start must be before end");
+        }
+    }
+
+    private long overlapDays(LocalDate lockStart, LocalDate lockEnd, LocalDate start, LocalDate end) {
+        LocalDate s = lockStart.isAfter(start) ? lockStart : start;
+        LocalDate e = lockEnd.isBefore(end) ? lockEnd : end;
+        long days = ChronoUnit.DAYS.between(s, e);
+        return Math.max(0, days);
     }
 
     private RoomDto toDto(Room room) {

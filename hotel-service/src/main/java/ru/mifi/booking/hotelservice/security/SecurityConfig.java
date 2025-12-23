@@ -51,16 +51,21 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
 
                         // ===== Admin-only операции =====
-                        // HotelController#create
                         .requestMatchers(HttpMethod.POST, "/api/hotels/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/hotels/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/hotels/**").hasRole("ADMIN")
+
                         // RoomController#add
                         .requestMatchers(HttpMethod.POST, "/api/rooms").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/rooms/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/rooms/**").hasRole("ADMIN")
+
+                        // ===== Статистика =====
+                        .requestMatchers(HttpMethod.GET, "/api/rooms/stats").hasRole("ADMIN")
 
                         // ===== Публичные ручки (но только для аутентифицированных USER|ADMIN) =====
                         .requestMatchers(HttpMethod.GET, "/api/hotels/**").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/rooms").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/rooms/recommend").hasAnyRole("USER", "ADMIN")
-
+                        .requestMatchers(HttpMethod.GET, "/api/rooms/**").hasAnyRole("USER", "ADMIN")
                         // ===== Internal endpoints (под 2.4 заложим SERVICE) =====
                         .requestMatchers(HttpMethod.POST, "/api/rooms/*/confirm-availability").hasRole("SERVICE")
                         .requestMatchers(HttpMethod.POST, "/api/rooms/*/release").hasRole("SERVICE")
