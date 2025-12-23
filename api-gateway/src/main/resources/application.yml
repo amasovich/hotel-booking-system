@@ -1,5 +1,5 @@
 server:
-  port: 8080 #Если 8080 занят — поставьте 8084
+  port: 8080 # или 8084
 
 spring:
   application:
@@ -7,73 +7,53 @@ spring:
 
   cloud:
     gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+
       routes:
-        # =========================
-        # ТЕХНИЧЕСКИЕ: /booking/** и /hotel/**
-        # =========================
 
-        - id: booking-service-route
+        # =========================
+        # Booking Service
+        # =========================
+        # Публичный API бронирований и пользователей
+        # Gateway НЕ переписывает путь — сервисы работают сразу с /api/**
+        - id: booking-service-api-route
           uri: lb://booking-service
           predicates:
-            - Path=/booking/**
-          filters:
-            - RewritePath=/booking/(?<segment>.*), /${segment}
+            - Path=/api/booking/**,/api/bookings/**,/api/user/**
 
-        - id: hotel-service-route
+        # =========================
+        # Hotel Service
+        # =========================
+        # Публичный API отелей и номеров
+        # ВАЖНО:
+        #   - публикуются ТОЛЬКО публичные endpoints
+        #   - internal endpoints подтверждения / освобождения
+        #     НЕ должны быть доступны через gateway
+        - id: hotel-service-api-route
           uri: lb://hotel-service
           predicates:
-            - Path=/hotel/**
-          filters:
-            - RewritePath=/hotel/(?<segment>.*), /${segment}
+            - Path=/api/hotels/**,/api/rooms,/api/rooms/recommend
 
-        # =========================
-        # ПУБЛИЧНЫЕ API
-        # =========================
 
-        # Booking API: /api/booking/**  -> /{segment}
-        - id: booking-service-api-booking-route
-          uri: lb://booking-service
-          predicates:
-            - Path=/api/booking/**
-          filters:
-            - RewritePath=/api/booking/(?<segment>.*), /${segment}
-
-        # Booking API: /api/bookings/** -> /{segment}
-        # (история бронирований и т.п.)
-        - id: booking-service-api-bookings-route
-          uri: lb://booking-service
-          predicates:
-            - Path=/api/bookings/**
-          filters:
-            - RewritePath=/api/bookings/(?<segment>.*), /${segment}
-
-        # User API: /api/user/** -> /{segment}
-        # (register/auth + позже admin CRUD)
-        - id: booking-service-api-user-route
-          uri: lb://booking-service
-          predicates:
-            - Path=/api/user/**
-          # ВАЖНО: без RewritePath!
-          # Пусть booking-service получит URL как есть: /api/user/register
-
-        # Hotel API: /api/hotels/**
-        - id: hotel-service-hotels-api-route
-          uri: lb://hotel-service
-          predicates:
-            - Path=/api/hotels/**
-
-        # Hotel API: /api/rooms/**
-        - id: hotel-service-rooms-api-route
-          uri: lb://hotel-service
-          predicates:
-            - Path=/api/rooms/**
+# =========================
+# Eureka
+# =========================
 
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka
+
   instance:
     prefer-ip-address: true
+
+
+# =========================
+# Management / Actuator
+# =========================
 
 management:
   endpoints:
