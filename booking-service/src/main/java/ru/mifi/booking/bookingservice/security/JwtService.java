@@ -12,29 +12,87 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Date;
 
+/**
+ * Сервис генерации JWT.
+ *
+ * <p>
+ * Я выпускаю два типа токенов:
+ * 1) USER/ADMIN — для клиентов (TTL = 1 час по ТЗ)
+ * 2) SERVICE — короткоживущий токен для межсервисных вызовов (по 2.4)
+ * </p>
+ *
+ * <p>
+ * В токен я кладу:
+ * - sub = userId (или служебный subject для SERVICE)
+ * - claim role = USER|ADMIN|SERVICE
+ * </p>
+ */
 @Service
 public class JwtService {
 
     private final String secret;
     private final long ttlSeconds;
+    private final long serviceTtlSeconds;
 
     public JwtService(
             @Value("${security.jwt.secret}") String secret,
-            @Value("${security.jwt.ttl}") long ttlSeconds
+            @Value("${security.jwt.ttl}") long ttlSeconds,
+            @Value("${security.jwt.service-ttl:300}") long serviceTtlSeconds
     ) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("security.jwt.secret is empty");
+        }
+        if (ttlSeconds <= 0) {
+            throw new IllegalStateException("security.jwt.ttl must be > 0");
+        }
+        if (serviceTtlSeconds <= 0) {
+            throw new IllegalStateException("security.jwt.service-ttl must be > 0");
+        }
+
         this.secret = secret;
         this.ttlSeconds = ttlSeconds;
+        this.serviceTtlSeconds = serviceTtlSeconds;
     }
 
+    /**
+     * JWT для пользователя (USER/ADMIN).
+     *
+     * @param userId id пользователя (кладётся в sub)
+     * @param role   роль (USER|ADMIN)
+     * @return подписанный JWT
+     */
     public String generateToken(Long userId, String role) {
+        if (userId == null || userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
+        }
+        if (role == null || role.isBlank()) {
+            throw new IllegalArgumentException("role is empty");
+        }
+        return generateTokenInternal(String.valueOf(userId), role, ttlSeconds);
+    }
+
+    /**
+     * Короткоживущий JWT для межсервисных вызовов (ROLE_SERVICE).
+     *
+     * <p>
+     * Этот токен НЕ выдаётся наружу клиентам.
+     * </p>
+     *
+     * @return подписанный JWT с ролью SERVICE
+     */
+    public String generateServiceToken() {
+        return generateTokenInternal("booking-service", "SERVICE", serviceTtlSeconds);
+    }
+
+    private String generateTokenInternal(String subject, String role, long ttl) {
         try {
             Instant now = Instant.now();
 
             JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                    .subject(String.valueOf(userId))   // sub = userId
-                    .claim("role", role)                // USER | ADMIN
+                    .subject(subject)                  // sub
+                    .claim("role", role)               // role = USER|ADMIN|SERVICE
                     .issueTime(Date.from(now))
-                    .expirationTime(Date.from(now.plusSeconds(ttlSeconds)))
+                    .expirationTime(Date.from(now.plusSeconds(ttl)))
                     .build();
 
             SignedJWT signedJWT = new SignedJWT(

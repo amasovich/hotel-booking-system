@@ -37,3 +37,8 @@ security:
   jwt:
     secret: ${SECURITY_JWT_SECRET:very-secret-jwt-key-for-mifi-final-project}
     ttl: 3600 # seconds (1 hour)
+    service-ttl: 300
+
+services:
+  hotel-service:
+    base-url: http://localhost:8082

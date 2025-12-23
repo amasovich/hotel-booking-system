@@ -14,6 +14,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.web.SecurityFilterChain;
 
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -61,8 +62,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/rooms/recommend").hasAnyRole("USER", "ADMIN")
 
                         // ===== Internal endpoints (под 2.4 заложим SERVICE) =====
-                        .requestMatchers(HttpMethod.POST, "/api/rooms/*/confirm-availability").hasAnyRole("ADMIN", "SERVICE")
-                        .requestMatchers(HttpMethod.POST, "/api/rooms/*/release").hasAnyRole("ADMIN", "SERVICE")
+                        .requestMatchers(HttpMethod.POST, "/api/rooms/*/confirm-availability").hasRole("SERVICE")
+                        .requestMatchers(HttpMethod.POST, "/api/rooms/*/release").hasRole("SERVICE")
 
                         // Всё остальное — только с валидным JWT
                         .anyRequest().authenticated()
@@ -82,7 +83,7 @@ public class SecurityConfig {
     @Bean
     public JwtDecoder jwtDecoder() {
         return NimbusJwtDecoder
-                .withSecretKey(new SecretKeySpec(secret.getBytes(), "HmacSHA256"))
+                .withSecretKey(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"))
                 .build();
     }
 

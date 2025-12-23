@@ -8,6 +8,9 @@ import ru.mifi.booking.common.exception.NotFoundException;
 import ru.mifi.booking.bookingservice.repository.BookingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.mifi.booking.bookingservice.client.HotelServiceClient;
+import ru.mifi.booking.bookingservice.client.dto.ConfirmAvailabilityRequest;
+import ru.mifi.booking.bookingservice.security.JwtService;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -24,10 +27,19 @@ public class BookingServiceFacade {
 
     private final BookingRepository bookingRepository;
     private final IdempotencyService idempotencyService;
+    private final HotelServiceClient hotelServiceClient;
+    private final JwtService jwtService;
 
-    public BookingServiceFacade(BookingRepository bookingRepository, IdempotencyService idempotencyService) {
+    public BookingServiceFacade(
+            BookingRepository bookingRepository,
+            IdempotencyService idempotencyService,
+            HotelServiceClient hotelServiceClient,
+            JwtService jwtService
+    ) {
         this.bookingRepository = bookingRepository;
         this.idempotencyService = idempotencyService;
+        this.hotelServiceClient = hotelServiceClient;
+        this.jwtService = jwtService;
     }
 
     public List<BookingDtos.BookingResponse> listByUser(Long userId) {
@@ -49,9 +61,10 @@ public class BookingServiceFacade {
     public BookingDtos.BookingResponse create(Long userId, BookingDtos.CreateBookingRequest req, String requestId) {
         validateDates(req.startDate(), req.endDate());
 
-        // Идемпотентность: один requestId = одна попытка создания
+        // 1) идемпотентность в рамках транзакции
         idempotencyService.rememberOrThrow(requestId);
 
+        // 2) создаём бронь (пока PENDING)
         Booking booking = new Booking();
         booking.setUserId(userId);
         booking.setRoomId(req.roomId());
@@ -62,6 +75,22 @@ public class BookingServiceFacade {
         booking.setBookingUid(UUID.randomUUID().toString());
 
         Booking saved = bookingRepository.save(booking);
+
+        // 3) вызываем hotel-service internal endpoint с service JWT
+        String serviceJwt = jwtService.generateServiceToken();
+
+        ConfirmAvailabilityRequest confirmReq = new ConfirmAvailabilityRequest(
+                saved.getStartDate(),
+                saved.getEndDate(),
+                saved.getBookingUid(),
+                requestId
+        );
+
+        hotelServiceClient.confirmAvailability(saved.getRoomId(), confirmReq, serviceJwt, requestId);
+
+        // 4) фиксируем статус
+        saved.setStatus(BookingStatus.CONFIRMED);
+
         return toDto(saved);
     }
 
@@ -74,7 +103,14 @@ public class BookingServiceFacade {
             throw new NotFoundException("Booking " + id + " not found");
         }
 
-        // На будущее: можно запретить отмену CONFIRMED без компенсации (это уже Шаг 7).
+        if (b.getStatus() == BookingStatus.CANCELLED) {
+            return;
+        }
+
+        // снять блокировку в hotel-service
+        String serviceJwt = jwtService.generateServiceToken();
+        hotelServiceClient.release(b.getRoomId(), b.getBookingUid(), serviceJwt, null);
+
         b.setStatus(BookingStatus.CANCELLED);
     }
 
