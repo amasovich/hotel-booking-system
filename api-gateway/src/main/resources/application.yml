@@ -14,34 +14,21 @@ spring:
 
       routes:
 
-        # =========================
         # Booking Service
-        # =========================
         # Публичный API бронирований и пользователей
-        # Gateway НЕ переписывает путь — сервисы работают сразу с /api/**
         - id: booking-service-api-route
           uri: lb://booking-service
           predicates:
             - Path=/api/booking/**,/api/bookings/**,/api/user/**
 
-        # =========================
         # Hotel Service
-        # =========================
         # Публичный API отелей и номеров
-        # ВАЖНО:
-        #   - публикуются ТОЛЬКО публичные endpoints
-        #   - internal endpoints подтверждения / освобождения
-        #     НЕ должны быть доступны через gateway
         - id: hotel-service-api-route
           uri: lb://hotel-service
           predicates:
-            - Path=/api/hotels/**,/api/rooms,/api/rooms/recommend
+            - Path=/api/hotels/**,/api/rooms,/api/rooms/recommend,/api/rooms/*
 
-
-# =========================
 # Eureka
-# =========================
-
 eureka:
   client:
     service-url:
@@ -50,11 +37,7 @@ eureka:
   instance:
     prefer-ip-address: true
 
-
-# =========================
 # Management / Actuator
-# =========================
-
 management:
   endpoints:
     web:

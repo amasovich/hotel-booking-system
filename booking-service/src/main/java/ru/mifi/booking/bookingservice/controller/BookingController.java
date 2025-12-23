@@ -16,6 +16,7 @@ import java.util.UUID;
  * Если Security ещё не подключали — временно можно подставить userId=1 и убрать Authentication.
  */
 @RestController
+@RequestMapping("/api")
 public class BookingController {
 
     private final BookingServiceFacade bookingService;
@@ -34,7 +35,7 @@ public class BookingController {
         }
 
         // “человечно”: пока без реальной таблицы users можно привязаться к имени пользователя
-        Long userId = Math.abs(auth.getName().hashCode()) * 1L;
+        Long userId = Long.parseLong(auth.getName());
 
         if (requestId == null || requestId.isBlank()) {
             // если Gateway не поставил — генерируем, но тогда идемпотентность будет “одноразовая”
@@ -47,14 +48,14 @@ public class BookingController {
     @GetMapping("/bookings")
     public List<BookingDtos.BookingResponse> list(Authentication auth) {
         if (auth == null) throw new UnauthorizedException("No auth");
-        Long userId = Math.abs(auth.getName().hashCode()) * 1L;
+        Long userId = Long.parseLong(auth.getName());
         return bookingService.listByUser(userId);
     }
 
     @GetMapping("/booking/{id}")
     public BookingDtos.BookingResponse get(@PathVariable Long id, Authentication auth) {
         if (auth == null) throw new UnauthorizedException("No auth");
-        Long userId = Math.abs(auth.getName().hashCode()) * 1L;
+        Long userId = Long.parseLong(auth.getName());
         return bookingService.get(id, userId);
     }
 
@@ -68,7 +69,7 @@ public class BookingController {
         // requestId для cancel можно тоже логировать отдельной таблицей — но по плану достаточно для POST
         if (requestId == null || requestId.isBlank()) requestId = UUID.randomUUID().toString();
 
-        Long userId = Math.abs(auth.getName().hashCode()) * 1L;
+        Long userId = Long.parseLong(auth.getName());
         bookingService.cancel(id, userId);
     }
 }

@@ -4,14 +4,21 @@ server:
 spring:
   application:
     name: booking-service
+
   datasource:
     url: jdbc:h2:mem:booking-db;DB_CLOSE_DELAY=-1
-    driverClassName: org.h2.Driver
+    driver-class-name: org.h2.Driver
     username: sa
     password: password
+
   jpa:
     hibernate:
       ddl-auto: update
+    defer-datasource-initialization: true
+
+  sql:
+    init:
+      mode: always
 
 eureka:
   client:

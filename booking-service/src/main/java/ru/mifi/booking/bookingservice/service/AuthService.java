@@ -1,26 +1,28 @@
 package ru.mifi.booking.bookingservice.service;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import ru.mifi.booking.common.exception.ConflictException;
-import ru.mifi.booking.common.exception.UnauthorizedException;
 import ru.mifi.booking.bookingservice.dto.AuthRequest;
 import ru.mifi.booking.bookingservice.dto.AuthResponse;
 import ru.mifi.booking.bookingservice.dto.RegisterRequest;
 import ru.mifi.booking.bookingservice.entity.User;
 import ru.mifi.booking.bookingservice.entity.UserRole;
 import ru.mifi.booking.bookingservice.repository.UserRepository;
+import ru.mifi.booking.bookingservice.security.JwtService;
+import ru.mifi.booking.common.exception.ConflictException;
+import ru.mifi.booking.common.exception.UnauthorizedException;
 
 @Service
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final TokenService tokenService;
-    private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
-    public AuthService(UserRepository userRepository, TokenService tokenService) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
         this.userRepository = userRepository;
-        this.tokenService = tokenService;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     public AuthResponse register(RegisterRequest req) {
@@ -28,10 +30,17 @@ public class AuthService {
             throw new ConflictException("Email already registered");
         }
 
-        User user = new User(null, req.name(), req.email(), encoder.encode(req.password()), UserRole.USER);
+        User user = new User(
+                null,
+                req.name(),
+                req.email(),
+                passwordEncoder.encode(req.password()),
+                UserRole.USER
+        );
+
         User saved = userRepository.save(user);
 
-        String token = tokenService.issueToken(saved);
+        String token = jwtService.generateToken(saved.getId(), saved.getRole().name());
         return new AuthResponse(saved.getId(), token, saved.getRole().name());
     }
 
@@ -39,11 +48,11 @@ public class AuthService {
         User user = userRepository.findByEmail(req.email())
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
-        if (!encoder.matches(req.password(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(req.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid credentials");
         }
 
-        String token = tokenService.issueToken(user);
+        String token = jwtService.generateToken(user.getId(), user.getRole().name());
         return new AuthResponse(user.getId(), token, user.getRole().name());
     }
 }
