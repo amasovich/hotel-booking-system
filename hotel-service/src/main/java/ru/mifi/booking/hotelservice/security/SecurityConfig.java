@@ -1,4 +1,4 @@
-package ru.mifi.booking.bookingservice.security;
+package ru.mifi.booking.hotelservice.security;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -8,24 +8,21 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * Security-конфигурация booking-service.
+ * Security-конфигурация hotel-service.
  *
  * <p>
  * Я настраиваю сервис как Resource Server:
- * - принимаю JWT, подписанные нашим секретом (HS256)
- * - беру роль из claim "role" и превращаю в ROLE_<ROLE>
+ * - принимаю JWT от booking-service
+ * - извлекаю роль из claim "role" (USER/ADMIN/SERVICE)
  * - ограничиваю доступ к endpoints по ролям
  * </p>
  */
@@ -36,39 +33,36 @@ public class SecurityConfig {
     private final String secret;
 
     public SecurityConfig(@Value("${security.jwt.secret}") String secret) {
-        if (secret == null || secret.isBlank()) {
-            throw new IllegalStateException("security.jwt.secret is empty. JWT validation cannot work without secret.");
-        }
         this.secret = secret;
     }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // REST API: без сессий
+                // REST API: сессии не нужны
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 // CSRF выключаем (у нас stateless API)
                 .csrf(csrf -> csrf.disable())
 
-                // отключаем лишние дефолтные механики
-                .formLogin(form -> form.disable())
-                .httpBasic(basic -> basic.disable())
-
                 .authorizeHttpRequests(auth -> auth
-                        // Actuator (по желанию можно тоже закрыть)
+                        // Actuator оставляем доступным для health/info (при желании можно тоже закрыть)
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
 
-                        // Публичные endpoints (логин/регистрация)
-                        .requestMatchers("/api/user/register", "/api/user/auth").permitAll()
+                        // ===== Admin-only операции =====
+                        // HotelController#create
+                        .requestMatchers(HttpMethod.POST, "/api/hotels/**").hasRole("ADMIN")
+                        // RoomController#add
+                        .requestMatchers(HttpMethod.POST, "/api/rooms").hasRole("ADMIN")
 
-                        // ADMIN-only операции над пользователями
-                        .requestMatchers(HttpMethod.POST, "/api/user").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/api/user").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/user").hasRole("ADMIN")
+                        // ===== Публичные ручки (но только для аутентифицированных USER|ADMIN) =====
+                        .requestMatchers(HttpMethod.GET, "/api/hotels/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/rooms").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/rooms/recommend").hasAnyRole("USER", "ADMIN")
 
-                        // Публичный API бронирований: только аутентифицированные USER|ADMIN
-                        .requestMatchers("/api/booking/**", "/api/bookings/**").hasAnyRole("USER", "ADMIN")
+                        // ===== Internal endpoints (под 2.4 заложим SERVICE) =====
+                        .requestMatchers(HttpMethod.POST, "/api/rooms/*/confirm-availability").hasAnyRole("ADMIN", "SERVICE")
+                        .requestMatchers(HttpMethod.POST, "/api/rooms/*/release").hasAnyRole("ADMIN", "SERVICE")
 
                         // Всё остальное — только с валидным JWT
                         .anyRequest().authenticated()
@@ -83,22 +77,23 @@ public class SecurityConfig {
 
     /**
      * Декодер JWT для HS256 (симметричный секрет).
-     * Секрет должен совпадать у всех сервисов, которые проверяют эти токены.
+     * Секрет должен совпадать с booking-service, который эти токены подписывает.
      */
     @Bean
     public JwtDecoder jwtDecoder() {
-        return NimbusJwtDecoder.withSecretKey(
-                new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256")
-        ).build();
+        return NimbusJwtDecoder
+                .withSecretKey(new SecretKeySpec(secret.getBytes(), "HmacSHA256"))
+                .build();
     }
 
     /**
-     * Конвертация claim "role": "USER" -> authority "ROLE_USER"
-     * (и аналогично ADMIN/SERVICE).
+     * Конвертация claim "role" -> GrantedAuthority вида ROLE_<ROLE>.
+     * Например role=ADMIN -> ROLE_ADMIN.
      */
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+
         converter.setJwtGrantedAuthoritiesConverter(jwt -> {
             String role = jwt.getClaimAsString("role");
             if (role == null || role.isBlank()) {
@@ -106,11 +101,7 @@ public class SecurityConfig {
             }
             return List.of(new SimpleGrantedAuthority("ROLE_" + role));
         });
-        return converter;
-    }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return converter;
     }
 }

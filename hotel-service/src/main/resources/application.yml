@@ -33,3 +33,7 @@ management:
     web:
       exposure:
         include: health,info
+
+security:
+  jwt:
+    secret: ${SECURITY_JWT_SECRET:very-secret-jwt-key-for-mifi-final-project}

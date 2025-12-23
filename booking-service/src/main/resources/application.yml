@@ -35,5 +35,5 @@ management:
 
 security:
   jwt:
-    secret: very-secret-jwt-key-for-mifi-final-project
+    secret: ${SECURITY_JWT_SECRET:very-secret-jwt-key-for-mifi-final-project}
     ttl: 3600 # seconds (1 hour)
