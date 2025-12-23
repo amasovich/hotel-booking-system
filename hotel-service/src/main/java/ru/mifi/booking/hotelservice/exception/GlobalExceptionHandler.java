@@ -5,8 +5,12 @@ import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.MDC;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+//import org.springframework.security.access.AccessDeniedException;
+//import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -15,33 +19,21 @@ import ru.mifi.booking.common.exception.ApiException;
 import ru.mifi.booking.common.http.RequestHeaders;
 
 /**
- * Глобальный обработчик ошибок hotel-service.
+ * Глобальный обработчик ошибок xxx-service.
  *
  * <p>
- * Я привожу все ошибки к единому формату {@link ErrorDto} из модуля common,
- * сохраняя единообразие ответа для API Gateway и клиентов.
- * </p>
- *
- * <p>
- * При этом я возвращаю корректные HTTP-статусы:
- * <ul>
- *     <li>{@link ApiException} → 404/409/... в зависимости от исключения</li>
- *     <li>{@link MethodArgumentNotValidException} → 400 Bad Request</li>
- *     <li>любая другая ошибка → 500 Internal Server Error</li>
- * </ul>
+ * Я привожу все ошибки к единому формату {@link ErrorDto},
+ * возвращая корректные HTTP-статусы и requestId.
  * </p>
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String MDC_REQUEST_ID_KEY = "requestId";
 
     /**
-     * Обработка ожидаемых бизнес-ошибок (404/409 и т.д.).
-     *
-     * @param ex      бизнес-исключение
-     * @param request HTTP-запрос
-     * @return ErrorDto в едином формате
+     * Обработка ожидаемых бизнес-ошибок (404/409/401 и т.д.).
      */
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorDto> handleApiException(ApiException ex, HttpServletRequest request) {
@@ -50,16 +42,12 @@ public class GlobalExceptionHandler {
             status = HttpStatus.INTERNAL_SERVER_ERROR;
         }
 
-        ErrorDto dto = buildDto(status, ex.getMessage(), request);
+        ErrorDto dto = buildDto(status, resolveErrorCode(ex), ex.getMessage(), request);
         return ResponseEntity.status(status).body(dto);
     }
 
     /**
-     * Ошибки валидации DTO (например, @Valid / @NotNull и т.п.).
-     *
-     * @param ex      исключение валидации
-     * @param request HTTP-запрос
-     * @return ErrorDto в едином формате
+     * Ошибки валидации DTO (@Valid).
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorDto> handleValidationException(MethodArgumentNotValidException ex,
@@ -77,43 +65,78 @@ public class GlobalExceptionHandler {
             message = "Validation error";
         }
 
-        ErrorDto dto = buildDto(status, message, request);
+        ErrorDto dto = buildDto(status, "VALIDATION_ERROR", message, request);
         return ResponseEntity.status(status).body(dto);
     }
 
+//    /**
+//     * 401 Unauthorized — пользователь не аутентифицирован.
+//     * (актуально после подключения Security)
+//     */
+//    @ExceptionHandler(AuthenticationException.class)
+//    public ResponseEntity<ErrorDto> handleAuthentication(AuthenticationException ex,
+//                                                         HttpServletRequest request) {
+//
+//        HttpStatus status = HttpStatus.UNAUTHORIZED;
+//        ErrorDto dto = buildDto(status, "UNAUTHORIZED", "Authentication required", request);
+//        return ResponseEntity.status(status).body(dto);
+//    }
+//
+//    /**
+//     * 403 Forbidden — доступ запрещён.
+//     * (актуально после подключения Security)
+//     */
+//    @ExceptionHandler(AccessDeniedException.class)
+//    public ResponseEntity<ErrorDto> handleAccessDenied(AccessDeniedException ex,
+//                                                       HttpServletRequest request) {
+//
+//        HttpStatus status = HttpStatus.FORBIDDEN;
+//        ErrorDto dto = buildDto(status, "ACCESS_DENIED", "Access denied", request);
+//        return ResponseEntity.status(status).body(dto);
+//    }
+
     /**
-     * Обработка всех непредвиденных ошибок (фолбэк).
-     *
-     * @param ex      исключение
-     * @param request HTTP-запрос
-     * @return ErrorDto в едином формате
+     * Фолбэк для всех непредвиденных ошибок.
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorDto> handleAnyException(Exception ex, HttpServletRequest request) {
-        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
 
-        ErrorDto dto = buildDto(status, ex.getMessage(), request);
+        log.error("Unexpected error", ex);
+
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        ErrorDto dto = buildDto(status, "INTERNAL_ERROR", ex.getMessage(), request);
         return ResponseEntity.status(status).body(dto);
     }
 
-    private ErrorDto buildDto(HttpStatus status, String message, HttpServletRequest request) {
+    private ErrorDto buildDto(HttpStatus status,
+                              String error,
+                              String message,
+                              HttpServletRequest request) {
+
         String requestId = resolveRequestId(request);
 
         return new ErrorDto(
                 Instant.now(),
                 status.value(),
-                status.getReasonPhrase(),
+                error,
                 message,
                 request.getRequestURI(),
                 requestId
         );
     }
 
+    private String resolveErrorCode(Exception ex) {
+        return ex.getClass()
+                .getSimpleName()
+                .replace("Exception", "")
+                .toUpperCase();
+    }
+
     /**
      * Получение requestId в приоритетном порядке:
      * 1) из заголовка X-Request-Id
-     * 2) из request attribute (если фильтр положил туда значение)
-     * 3) из MDC (на случай, если ошибка случилась после установки MDC)
+     * 2) из request attribute
+     * 3) из MDC
      */
     private String resolveRequestId(HttpServletRequest request) {
         String requestId = request.getHeader(RequestHeaders.X_REQUEST_ID);
@@ -137,3 +160,4 @@ public class GlobalExceptionHandler {
         return null;
     }
 }
+
