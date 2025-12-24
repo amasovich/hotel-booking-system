@@ -43,6 +43,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Тестовая поддержка Spring Security (MockMvc + jwt()/user()) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>ru.mifi.booking</groupId>
             <artifactId>common</artifactId>
