@@ -14,11 +14,11 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    defer-datasource-initialization: true
 
+  # Инициализацию тестовых данных делаю через BookingDataInitializer (ApplicationRunner).
   sql:
     init:
-      mode: always
+      mode: never
 
 eureka:
   client:
