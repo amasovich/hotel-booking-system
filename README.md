@@ -39,34 +39,26 @@
 
 ```mermaid
 flowchart LR
-  classDef infra fill:#0b1320,stroke:#334155,color:#e2e8f0;
-  classDef gateway fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
-  classDef svc fill:#111827,stroke:#a78bfa,color:#e2e8f0;
-  classDef internal fill:#111827,stroke:#f59e0b,color:#e2e8f0,stroke-dasharray: 5 5;
-  classDef note fill:#0b1320,stroke:#64748b,color:#cbd5e1;
+  Client["Client\nPostman"] 
+  E["discovery-server\nEureka\n8761"]
+  G["api-gateway\n8080\nPublic API\nJWT, RBAC\nX-Request-Id"]
+  B["booking-service\n8081\nUsers + bookings\nSaga\nRetries, timeouts\nIdempotency: X-Request-Id"]
+  H["hotel-service\n8082\nHotels + rooms\nRecommend + lock\nTimesBooked"]
 
-  Client((Client / Postman)):::note
+  I1["confirm-availability\ninternal"]
+  I2["release\ninternal"]
 
-  E["discovery-server\n(Eureka)\n:8761"]:::infra
-  G["api-gateway\n:8080\nPublic API\nJWT + RBAC\nX-Request-Id"]:::gateway
-  B["booking-service\n:8081\nUsers + Bookings\nSaga + retries/timeouts\nIdempotency (X-Request-Id)"]:::svc
-  H["hotel-service\n:8082\nHotels + Rooms\nrecommend + locking\ntimesBooked"]:::svc
+  Client -->|HTTP public routes| G
 
-  I1["confirm-availability\n(internal)"]:::internal
-  I2["release\n(internal)"]:::internal
-
-  Client -->|HTTP (public routes)| G
-  G -->|/api/... (public)| B
-  G -->|/api/... (public)| H
+  G -->|public routes| B
+  G -->|public routes| H
 
   G -->|service discovery| E
   B -->|service discovery| E
   H -->|service discovery| E
 
-  B -->|internal call (lb://hotel-service)| I1
-  I1 --> H
-  B -->|compensation| I2
-  I2 --> H
+  B -->|internal call| I1 --> H
+  B -->|compensation| I2 --> H
 ```
 
 ---
