@@ -41,7 +41,9 @@ security:
 
 services:
   hotel-service:
-    base-url: http://localhost:8082
+    # В прод-подобном запуске лучше ходить по имени сервиса через Eureka + LoadBalancer.
+    # Для локального прогона без Eureka можно переопределить переменной окружения.
+    base-url: ${HOTEL_SERVICE_BASE_URL:http://hotel-service}
     connect-timeout-ms: 2000
     read-timeout-ms: 3000
     retry:

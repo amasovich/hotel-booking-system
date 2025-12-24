@@ -19,7 +19,9 @@ spring:
         - id: booking-service-api-route
           uri: lb://booking-service
           predicates:
-            - Path=/api/booking/**,/api/bookings/**,/api/user/**
+            # Важно: Ant-style pattern '/api/booking/**' НЕ матчит '/api/booking' без слэша.
+            # Поэтому добавляю явные пути, чтобы POST /api/booking и GET /api/bookings попадали в маршрут.
+            - Path=/api/booking,/api/booking/**,/api/bookings,/api/bookings/**,/api/user/**
 
         # Hotel Service
         # Публичный API отелей и номеров

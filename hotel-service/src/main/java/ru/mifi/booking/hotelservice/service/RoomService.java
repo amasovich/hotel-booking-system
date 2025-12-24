@@ -2,6 +2,9 @@ package ru.mifi.booking.hotelservice.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.mifi.booking.common.exception.BadRequestException;
 import ru.mifi.booking.common.exception.ConflictException;
 import ru.mifi.booking.common.exception.NotFoundException;
@@ -24,6 +27,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class RoomService {
+
+    private static final Logger log = LoggerFactory.getLogger(RoomService.class);
 
     private final RoomRepository roomRepository;
     private final RoomLockRepository roomLockRepository;
@@ -169,14 +174,18 @@ public class RoomService {
      */
     @Transactional
     public void confirmAvailability(Long roomId, ConfirmAvailabilityRequest req) {
-        if (roomLockRepository.findByRequestId(req.requestId()).isPresent()) {
-            return; // повторный вызов с тем же requestId
-        }
-
         validateRange(req.startDate(), req.endDate());
 
-        Room room = roomRepository.findById(roomId)
+        // 1) Блокируем room строку, чтобы сериализовать конкурентные confirm на один и тот же roomId.
+        Room room = roomRepository.findByIdForUpdate(roomId)
                 .orElseThrow(() -> new NotFoundException("Room " + roomId + " not found"));
+
+        // 2) Идемпотентность по requestId.
+        //    Проверку делаю ПОСЛЕ лока, чтобы снизить риск гонки «check-then-insert».
+        if (roomLockRepository.findByRequestId(req.requestId()).isPresent()) {
+            log.debug("confirm-availability idempotent hit: roomId={}, requestId={}", roomId, req.requestId());
+            return;
+        }
 
         if (!room.isAvailable()) {
             throw new ConflictException("Room is not operational");
@@ -187,7 +196,17 @@ public class RoomService {
         }
 
         RoomLock lock = new RoomLock(null, room, req.startDate(), req.endDate(), req.bookingId(), req.requestId());
-        roomLockRepository.save(lock);
+        try {
+            roomLockRepository.save(lock);
+        } catch (DataIntegrityViolationException ex) {
+            // В конкурентных сценариях возможна ситуация, когда requestId «влетел» параллельно.
+            // Тогда считаю это успешной идемпотентной обработкой.
+            if (roomLockRepository.findByRequestId(req.requestId()).isPresent()) {
+                log.debug("confirm-availability idempotent after save-race: roomId={}, requestId={}", roomId, req.requestId());
+                return;
+            }
+            throw ex;
+        }
 
         // метрика справедливости: увеличиваем при подтверждении доступности
         room.setTimesBooked(room.getTimesBooked() + 1);

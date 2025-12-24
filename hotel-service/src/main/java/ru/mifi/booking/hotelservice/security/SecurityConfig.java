@@ -38,7 +38,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           RestAuthenticationEntryPoint authenticationEntryPoint,
+                                           RestAccessDeniedHandler accessDeniedHandler) throws Exception {
         http
                 // REST API: сессии не нужны
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -75,6 +77,11 @@ public class SecurityConfig {
 
                         // Всё остальное — только с валидным JWT
                         .anyRequest().authenticated()
+                )
+
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
                 )
 
                 .oauth2ResourceServer(oauth2 -> oauth2

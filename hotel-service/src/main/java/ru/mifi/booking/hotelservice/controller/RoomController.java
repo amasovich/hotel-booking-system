@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.MDC;
 import ru.mifi.booking.hotelservice.dto.ConfirmAvailabilityRequest;
 import ru.mifi.booking.hotelservice.dto.RoomDto;
 import ru.mifi.booking.hotelservice.dto.RoomStatsDto;
@@ -155,7 +156,9 @@ public class RoomController {
             @PathVariable("id") Long id,
             @Valid @RequestBody ConfirmAvailabilityRequest req
     ) {
-        roomService.confirmAvailability(id, req);
+        try (MDC.MDCCloseable ignored = MDC.putCloseable("bookingUid", req.bookingId())) {
+            roomService.confirmAvailability(id, req);
+        }
     }
 
     /**
@@ -169,6 +172,8 @@ public class RoomController {
             @PathVariable("id") Long id,
             @RequestParam("bookingId") String bookingId
     ) {
-        roomService.release(id, bookingId);
+        try (MDC.MDCCloseable ignored = MDC.putCloseable("bookingUid", bookingId)) {
+            roomService.release(id, bookingId);
+        }
     }
 }
