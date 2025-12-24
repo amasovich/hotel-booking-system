@@ -38,27 +38,30 @@
 > Основная схема:
 
 ```mermaid
-flowchart LR
-  Client["Client\nPostman"] 
-  E["discovery-server\nEureka\n8761"]
-  G["api-gateway\n8080\nPublic API\nJWT, RBAC\nX-Request-Id"]
-  B["booking-service\n8081\nUsers + bookings\nSaga\nRetries, timeouts\nIdempotency: X-Request-Id"]
-  H["hotel-service\n8082\nHotels + rooms\nRecommend + lock\nTimesBooked"]
+flowchart TB
+  %% --- Nodes ---
+  Client["Client<br/>Postman"] 
+  E["discovery-server<br/>Eureka<br/>:8761"]
+  G["api-gateway<br/>:8080<br/>Public API<br/>JWT + RBAC<br/>X-Request-Id"]
+  B["booking-service<br/>:8081<br/>Users + bookings<br/>Saga<br/>Retries + timeouts<br/>Idempotency: X-Request-Id"]
+  H["hotel-service<br/>:8082<br/>Hotels + rooms<br/>Recommend + lock<br/>TimesBooked"]
 
-  I1["confirm-availability\ninternal"]
-  I2["release\ninternal"]
+  C["confirm-availability<br/>internal"]
+  R["release<br/>internal"]
 
+  %% --- Public flow ---
   Client -->|HTTP public routes| G
-
   G -->|public routes| B
   G -->|public routes| H
 
+  %% --- Service discovery ---
   G -->|service discovery| E
   B -->|service discovery| E
   H -->|service discovery| E
 
-  B -->|internal call| I1 --> H
-  B -->|compensation| I2 --> H
+  %% --- Saga internal calls ---
+  B -->|internal call| C --> H
+  B -->|compensation| R --> H
 ```
 
 ---
