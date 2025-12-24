@@ -39,33 +39,6 @@
 
 ```mermaid
 flowchart TB
-  %% --- Nodes ---
-  Client["Client"] 
-  E["discovery-server<br/>Eureka<br/>Port:8761"]
-  G["api-gateway<br/>Port:8080<br/>Public API<br/>JWT + RBAC<br/>X-Request-Id"]
-  B["booking-service<br/>Port:8081<br/>Users + bookings<br/>Saga<br/>Retries + timeouts<br/>Idempotency: X-Request-Id"]
-  H["hotel-service<br/>Port:8082<br/>Hotels + rooms<br/>Recommend + lock<br/>TimesBooked"]
-
-  C["confirm-availability<br/>internal"]
-  R["release<br/>internal"]
-
-  %% --- Public flow ---
-  Client -->|HTTP public routes| G
-  G -->|public routes| B
-  G -->|public routes| H
-
-  %% --- Service discovery ---
-  G -->|service discovery| E
-  B -->|service discovery| E
-  H -->|service discovery| E
-
-  %% --- Saga internal calls ---
-  B -->|internal call| C --> H
-  B -->|compensation| R --> H
-```
-
-```mermaid
-flowchart TB
 %% ===== Styles (GitHub-safe) =====
 classDef infra fill:#0b1320,stroke:#334155,color:#e2e8f0;
 classDef gateway fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
@@ -73,12 +46,12 @@ classDef svc fill:#111827,stroke:#a78bfa,color:#e2e8f0;
 classDef internal fill:#111827,stroke:#f59e0b,color:#e2e8f0,stroke-dasharray: 5 5;
 
 %% ===== Nodes =====
-Client["Client<br/>Postman"]:::svc
-E["discovery-server<br/>Eureka<br/>:8761"]:::infra
-G["api-gateway<br/>:8080<br/>Public API<br/>JWT + RBAC<br/>X-Request-Id"]:::gateway
-B["booking-service<br/>:8081<br/>Users + bookings<br/>Saga<br/>Retries + timeouts<br/>Idempotency X-Request-Id"]:::svc
+Client["Client"]:::svc
+E["discovery-server<br/>Eureka<br/>Port:8761"]:::infra
+G["api-gateway<br/>Port:8080<br/>Public API<br/>JWT + RBAC<br/>X-Request-Id"]:::gateway
+B["booking-service<br/>Port:8081<br/>Users + bookings<br/>Saga<br/>Retries + timeouts<br/>Idempotency X-Request-Id"]:::svc
 
-subgraph HS["hotel-service :8082"]
+subgraph HS["hotel-service Port:8082"]
 direction TB
 H["Hotels + rooms<br/>Recommend + lock<br/>TimesBooked"]:::svc
 C["confirm-availability<br/>internal"]:::internal
@@ -99,8 +72,6 @@ G -->|discovery| E
 B -->|discovery| E
 H -->|discovery| E
 ```
-
-
 
 ---
 
