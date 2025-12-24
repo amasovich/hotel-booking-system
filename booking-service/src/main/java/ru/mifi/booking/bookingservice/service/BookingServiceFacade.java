@@ -1,14 +1,5 @@
 package ru.mifi.booking.bookingservice.service;
 
-import ru.mifi.booking.bookingservice.entity.Booking;
-import ru.mifi.booking.bookingservice.entity.BookingStatus;
-import ru.mifi.booking.bookingservice.dto.BookingDtos;
-import ru.mifi.booking.common.exception.ConflictException;
-import ru.mifi.booking.common.exception.BadRequestException;
-import ru.mifi.booking.common.exception.NotFoundException;
-import ru.mifi.booking.bookingservice.repository.BookingRepository;
-import ru.mifi.booking.common.exception.ApiException;
-import ru.mifi.booking.common.exception.ServiceUnavailableException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -17,7 +8,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 import ru.mifi.booking.bookingservice.client.HotelServiceClient;
 import ru.mifi.booking.bookingservice.client.dto.ConfirmAvailabilityRequest;
 import ru.mifi.booking.bookingservice.client.dto.HotelRoomDto;
+import ru.mifi.booking.bookingservice.dto.BookingDtos;
+import ru.mifi.booking.bookingservice.entity.Booking;
+import ru.mifi.booking.bookingservice.entity.BookingStatus;
+import ru.mifi.booking.bookingservice.repository.BookingRepository;
 import ru.mifi.booking.bookingservice.security.JwtService;
+import ru.mifi.booking.common.exception.ApiException;
+import ru.mifi.booking.common.exception.BadRequestException;
+import ru.mifi.booking.common.exception.ConflictException;
+import ru.mifi.booking.common.exception.NotFoundException;
+import ru.mifi.booking.common.exception.ServiceUnavailableException;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -70,14 +70,19 @@ public class BookingServiceFacade {
     public BookingDtos.BookingResponse create(Long userId, BookingDtos.CreateBookingRequest req, String requestId) {
         validateDates(req.startDate(), req.endDate());
 
-        // 0) определяем roomId (либо берём из запроса, либо выбираем через recommend)
+        // 0) Идемпотентность должна сработать ДО любых внешних вызовов (recommend/confirm).
+        // Иначе второй запрос с тем же X-Request-Id успеет дёрнуть hotel-service, а конфликт
+        // проявится только позже — когда БД проверит уникальный индекс request_log.
+        idempotencyService.rememberOrThrow(requestId);
+
+        // 1) определяем roomId (либо берём из запроса, либо выбираем через recommend)
         String serviceJwt = jwtService.generateServiceToken();
         Long roomId = resolveRoomId(req, serviceJwt, requestId);
 
-        // 1) локальная транзакция: создаём PENDING + фиксируем идемпотентность (requestId)
+        // 2) локальная транзакция: создаём PENDING (без повторной фиксации requestId)
         Booking pending = createPendingBooking(userId, roomId, req.startDate(), req.endDate(), requestId);
 
-        // 2) удалённый вызов: confirm-availability с таймаутом + ретраями
+        // 3) удалённый вызов: confirm-availability с таймаутом + ретраями
         ConfirmAvailabilityRequest confirmReq = new ConfirmAvailabilityRequest(
                 pending.getStartDate(),
                 pending.getEndDate(),
@@ -88,18 +93,18 @@ public class BookingServiceFacade {
         try {
             hotelServiceClient.confirmAvailability(roomId, confirmReq, serviceJwt, requestId);
 
-            // 3) при успехе: обновляем статус на CONFIRMED
+            // 4) при успехе: обновляем статус на CONFIRMED
             updateStatus(pending.getId(), BookingStatus.CONFIRMED);
             return toDto(getBookingOrThrow(pending.getId()));
 
         } catch (ConflictException ex) {
-            // 4) конкурентный конфликт / отсутствие слота: отменяем бронь и отдаём 409
+            // 5) конкурентный конфликт / отсутствие слота: отменяем бронь и отдаём 409
             updateStatus(pending.getId(), BookingStatus.CANCELLED);
             safeRelease(roomId, pending.getBookingUid(), serviceJwt, requestId);
             throw ex;
 
         } catch (Exception ex) {
-            // 4) ошибка/таймаут: отменяем бронь, пытаемся компенсировать release, затем отдаём понятный статус
+            // 5) ошибка/таймаут: отменяем бронь, пытаемся компенсировать release, затем отдаём понятный статус
             updateStatus(pending.getId(), BookingStatus.CANCELLED);
             safeRelease(roomId, pending.getBookingUid(), serviceJwt, requestId);
 
@@ -136,10 +141,9 @@ public class BookingServiceFacade {
                                          LocalDate endDate,
                                          String requestId) {
 
+        // requestId здесь пока не используется, но оставлен параметром на будущее:
+        // например, для аудита/логирования связки “bookingId ↔ requestId”.
         return transactionTemplate.execute(status -> {
-            // идемпотентность обязана быть в той же локальной транзакции, что и создание брони
-            idempotencyService.rememberOrThrow(requestId);
-
             Booking booking = new Booking();
             booking.setUserId(userId);
             booking.setRoomId(roomId);
@@ -212,4 +216,3 @@ public class BookingServiceFacade {
         );
     }
 }
-

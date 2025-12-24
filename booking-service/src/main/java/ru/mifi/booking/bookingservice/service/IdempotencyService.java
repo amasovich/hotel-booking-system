@@ -28,7 +28,7 @@ public class IdempotencyService {
     @Transactional
     public void rememberOrThrow(String requestId) {
         try {
-            requestLogRepository.save(new RequestLog(requestId, OffsetDateTime.now()));
+            requestLogRepository.saveAndFlush(new RequestLog(requestId, OffsetDateTime.now()));
         } catch (DataIntegrityViolationException ex) {
             // Это и есть "правильная" идемпотентность: дубль детектится на уровне БД.
             throw new ConflictException("Duplicate request: X-Request-Id=" + requestId);
