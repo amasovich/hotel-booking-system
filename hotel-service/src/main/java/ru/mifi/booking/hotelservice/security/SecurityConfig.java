@@ -65,7 +65,7 @@ public class SecurityConfig {
 
                         // ===== Публичные ручки (но только для аутентифицированных USER|ADMIN) =====
                         .requestMatchers(HttpMethod.GET, "/api/hotels/**").hasAnyRole("USER", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/rooms/**").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/rooms/**").hasAnyRole("USER", "ADMIN", "SERVICE")
                         // ===== Internal endpoints (под 2.4 заложим SERVICE) =====
                         .requestMatchers(HttpMethod.POST, "/api/rooms/*/confirm-availability").hasRole("SERVICE")
                         .requestMatchers(HttpMethod.POST, "/api/rooms/*/release").hasRole("SERVICE")

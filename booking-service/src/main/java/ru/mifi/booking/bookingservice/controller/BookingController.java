@@ -4,10 +4,13 @@ import ru.mifi.booking.bookingservice.dto.BookingDtos;
 import ru.mifi.booking.common.exception.UnauthorizedException;
 import ru.mifi.booking.bookingservice.service.BookingServiceFacade;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -46,10 +49,13 @@ public class BookingController {
     }
 
     @GetMapping("/bookings")
-    public List<BookingDtos.BookingResponse> list(Authentication auth) {
+    public Page<BookingDtos.BookingResponse> list(
+            Authentication auth,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
         if (auth == null) throw new UnauthorizedException("No auth");
         Long userId = Long.parseLong(auth.getName());
-        return bookingService.listByUser(userId);
+        return bookingService.listByUser(userId, pageable);
     }
 
     @GetMapping("/booking/{id}")
