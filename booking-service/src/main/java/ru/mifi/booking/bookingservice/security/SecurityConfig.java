@@ -59,6 +59,9 @@ public class SecurityConfig {
                         // Actuator (по желанию можно тоже закрыть)
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
 
+                        // Swagger / OpenAPI (чтобы проверяющий мог открыть Swagger UI без токена)
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+
                         // Публичные endpoints (логин/регистрация)
                         .requestMatchers("/api/user/register", "/api/user/auth").permitAll()
 

@@ -1,5 +1,7 @@
 package ru.mifi.booking.bookingservice.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import ru.mifi.booking.bookingservice.dto.BookingDtos;
 import ru.mifi.booking.common.exception.UnauthorizedException;
 import ru.mifi.booking.bookingservice.service.BookingServiceFacade;
@@ -18,6 +20,7 @@ import java.util.UUID;
  * Важно: userId берём из Authentication. Если у вас JWT уже готов — будет работать “как надо”.
  * Если Security ещё не подключали — временно можно подставить userId=1 и убрать Authentication.
  */
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/api")
 public class BookingController {
@@ -79,4 +82,3 @@ public class BookingController {
         bookingService.cancel(id, userId);
     }
 }
-

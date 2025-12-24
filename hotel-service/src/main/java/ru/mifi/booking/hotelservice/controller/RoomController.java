@@ -1,5 +1,7 @@
 package ru.mifi.booking.hotelservice.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,7 @@ import java.util.List;
  * Внутренние методы используются Booking Service для confirm/release в рамках саги.
  * </p>
  */
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/api/rooms")
 public class RoomController {

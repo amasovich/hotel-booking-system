@@ -50,6 +50,9 @@ public class SecurityConfig {
                         // Actuator оставляем доступным для health/info (при желании можно тоже закрыть)
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
 
+                        // Swagger / OpenAPI (чтобы проверяющий мог открыть Swagger UI без токена)
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+
                         // ===== Admin-only операции =====
                         .requestMatchers(HttpMethod.POST, "/api/hotels/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/hotels/**").hasRole("ADMIN")

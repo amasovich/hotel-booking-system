@@ -1,5 +1,7 @@
 package ru.mifi.booking.hotelservice.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +14,7 @@ import java.util.List;
 /**
  * Контроллер CRUD-операций по отелям.
  */
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/api/hotels")
 public class HotelController {
