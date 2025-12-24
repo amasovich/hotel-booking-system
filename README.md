@@ -1,4 +1,4 @@
-# Hotel Booking System — итоговый проект по Spring / REST API (МИФИ)
+# Hotel Booking System - итоговый проект по Spring / REST API (МИФИ)
 
 Учебный проект, выполненный в рамках итоговой аттестации МИФИ по дисциплине **«Фреймворк Spring и работа с REST API»**.
 
@@ -16,13 +16,16 @@
 
 ## 1) Технологический стек
 
-- **Язык**: Java: **21+**
-- **Сборка**: Maven ххх ?
-- Spring Boot: **3.5.8**
-- Spring Cloud: **2025.0.0**
-- БД: **H2 in-memory** в каждом сервисе
-- Документация API: **Swagger / OpenAPI (springdoc)**
-- **IDE**: IntelliJ IDEA
+- **Язык**: Java **21+**
+- **Сборка**: **Maven** (multi-module / parent `pom.xml`)
+- **Фреймворк**: **Spring Boot 3.5.8**
+- **Spring Cloud**: **2025.0.0** (Eureka + Gateway)
+- **База данных**: **H2 (in-memory)** — отдельная БД в каждом сервисе (учебный режим)
+- **API-документация**: **OpenAPI/Swagger (springdoc-openapi)**
+- **Тестирование**:
+  - **JUnit 5 + Spring Boot Test** (интеграционные тесты)
+  - **Postman** (E2E коллекция + environment + автотесты/assert’ы)
+- **IDE**: **IntelliJ IDEA**
 
 ---
 
@@ -36,38 +39,33 @@
 
 ```mermaid
 flowchart LR
-  %% ===== Styles =====
   classDef infra fill:#0b1320,stroke:#334155,color:#e2e8f0;
   classDef gateway fill:#0f172a,stroke:#38bdf8,color:#e2e8f0;
   classDef svc fill:#111827,stroke:#a78bfa,color:#e2e8f0;
-  classDef internal fill:#111827,stroke:#f59e0b,color:#e2e8f0,stroke-dasharray: 5 4;
+  classDef internal fill:#111827,stroke:#f59e0b,color:#e2e8f0,stroke-dasharray: 5 5;
   classDef note fill:#0b1320,stroke:#64748b,color:#cbd5e1;
 
-  E[Eureka<br/>discovery-server<br/>:8761]:::infra
+  Client((Client / Postman)):::note
 
-  G[api-gateway<br/>:8080<br/><b>Public API</b><br/>JWT + RBAC<br/>X-Request-Id]:::gateway
+  E["discovery-server\n(Eureka)\n:8761"]:::infra
+  G["api-gateway\n:8080\nPublic API\nJWT + RBAC\nX-Request-Id"]:::gateway
+  B["booking-service\n:8081\nUsers + Bookings\nSaga + retries/timeouts\nIdempotency (X-Request-Id)"]:::svc
+  H["hotel-service\n:8082\nHotels + Rooms\nrecommend + locking\ntimesBooked"]:::svc
 
-  B[booking-service<br/>:8081<br/>Users + Bookings<br/><b>Saga</b> + retries/timeouts<br/>Idempotency by X-Request-Id]:::svc
+  I1["confirm-availability\n(internal)"]:::internal
+  I2["release\n(internal)"]:::internal
 
-  H[hotel-service<br/>:8082<br/>Hotels + Rooms<br/>recommend + lock<br/>timesBooked]:::svc
-
-  I1[confirm-availability<br/>(internal)]:::internal
-  I2[release<br/>(internal)]:::internal
-
-  %% discovery
-  G -. service discovery .-> E
-  B -. service discovery .-> E
-  H -. service discovery .-> E
-
-  %% public routes
-  Client((Client/Postman)):::note -->|HTTP (public routes)| G
+  Client -->|HTTP (public routes)| G
   G -->|/api/... (public)| B
   G -->|/api/... (public)| H
 
-  %% saga internal calls
-  B -->|direct internal call<br/>lb://hotel-service| I1
-  B -->|compensation| I2
+  G -->|service discovery| E
+  B -->|service discovery| E
+  H -->|service discovery| E
+
+  B -->|internal call (lb://hotel-service)| I1
   I1 --> H
+  B -->|compensation| I2
   I2 --> H
 ```
 
